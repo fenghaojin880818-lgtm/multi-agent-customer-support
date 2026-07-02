@@ -416,6 +416,306 @@ class QualityChecker:
 
 # ==================== 客服系统主类 ====================
 
+class CustomerServiceSystem:
+    """多代理客服系统"""
+    
+    def __init__(self):
+        # 初始化组件
+        self.classifier = IntentClassifier()
+        self.tech_agent = TechSupportAgent()
+        self.order_agent = OrderServiceAgent()
+        self.product_agent = ProductConsultAgent()
+        self.quality_checker = QualityChecker()
+        
+        # 构建工作流图
+        self.graph = self._build_graph()
+    
+    def _build_graph(self) -> StateGraph:
+        """构建 LangGraph 工作流"""
+        
+        def classify_intent(state: CustomerServiceState) -> CustomerServiceState:
+            """分类用户意图"""
+            print("🔍 分析用户意图...")
+            result = self.classifier.classify(state["user_message"])
+            
+            state["intent"] = result.get("intent", "escalate")
+            state["confidence"] = result.get("confidence", 0.5)
+            
+            print(f"   意图: {state['intent']} (置信度: {state['confidence']:.2f})")
+            return state
+        
+        def route_to_agent(state: CustomerServiceState) -> Literal["tech_support", "order_service", "product_consult", "escalate"]:
+            """路由到对应代理"""
+            intent = state["intent"]
+            confidence = state["confidence"]
+            
+            # 低置信度直接升级
+            if confidence < 0.6:
+                return "escalate"
+            
+            if intent == "tech_support":
+                return "tech_support"
+            elif intent == "order_service":
+                return "order_service"
+            elif intent == "product_consult":
+                return "product_consult"
+            else:
+                return "escalate"
+        
+        def tech_support_handler(state: CustomerServiceState) -> CustomerServiceState:
+            """技术支持处理"""
+            print("🔧 技术支持代理处理中...")
+            response = self.tech_agent.handle(state["user_message"])
+            state["agent_response"] = response
+            return state
+        
+        def order_service_handler(state: CustomerServiceState) -> CustomerServiceState:
+            """订单服务处理"""
+            print("📦 订单服务代理处理中...")
+            response = self.order_agent.handle(state["user_message"])
+            state["agent_response"] = response
+            return state
+        
+        def product_consult_handler(state: CustomerServiceState) -> CustomerServiceState:
+            """产品咨询处理"""
+            print("🛍️ 产品咨询代理处理中...")
+            response = self.product_agent.handle(state["user_message"])
+            state["agent_response"] = response
+            return state
+        
+        def escalate_handler(state: CustomerServiceState) -> CustomerServiceState:
+            """升级处理"""
+            print("👤 升级到人工客服...")
+            state["needs_escalation"] = True
+            state["escalation_reason"] = "意图识别置信度低或用户要求人工服务"
+            state["agent_response"] = """非常抱歉，您的问题需要人工客服来处理。
+
+我已经为您转接人工客服，请稍候...
+
+在等待期间，您也可以：
+1. 拨打客服热线：400-xxx-xxxx
+2. 发送邮件至：support@example.com
+3. 工作日 9:00-18:00 在线客服响应更快
+
+感谢您的耐心等待！"""
+            return state
+        
+        def quality_check(state: CustomerServiceState) -> CustomerServiceState:
+            """质量检查"""
+            print("✅ 执行质量检查...")
+            result = self.quality_checker.check(
+                state["user_message"],
+                state["agent_response"]
+            )
+            
+            state["quality_score"] = result.get("total_score", 0) / 100
+            
+            # 质量太低需要升级
+            if result.get("needs_escalation", False) or state["quality_score"] < 0.6:
+                state["needs_escalation"] = True
+                state["escalation_reason"] = result.get("reason", "质量检查未通过")
+            
+            print(f"   质量评分: {state['quality_score']:.2f}")
+            return state
+        
+        def should_escalate(state: CustomerServiceState) -> Literal["escalate_final", "respond"]:
+            """判断是否需要升级"""
+            if state.get("needs_escalation", False):
+                return "escalate_final"
+            return "respond"
+        
+        def final_escalate(state: CustomerServiceState) -> CustomerServiceState:
+            """最终升级处理"""
+            # 保留原始回复但添加升级提示
+            original_response = state["agent_response"]
+            state["agent_response"] = f"""{original_response}
+
+---
+⚠️ 系统提示：由于此问题可能需要更专业的处理，我们建议您联系人工客服以获得更好的服务。"""
+            return state
+        
+        def respond(state: CustomerServiceState) -> CustomerServiceState:
+            """最终响应"""
+            return state
+        
+        # 构建图
+        graph = StateGraph(CustomerServiceState)
+        
+        # 添加节点
+        graph.add_node("classify", classify_intent)
+        graph.add_node("tech_support", tech_support_handler)
+        graph.add_node("order_service", order_service_handler)
+        graph.add_node("product_consult", product_consult_handler)
+        graph.add_node("escalate", escalate_handler)
+        graph.add_node("quality_check", quality_check)
+        graph.add_node("escalate_final", final_escalate)
+        graph.add_node("respond", respond)
+        
+        # 添加边
+        graph.add_edge(START, "classify")
+        
+        # 条件路由
+        graph.add_conditional_edges(
+            "classify",
+            route_to_agent,
+            {
+                "tech_support": "tech_support",
+                "order_service": "order_service",
+                "product_consult": "product_consult",
+                "escalate": "escalate"
+            }
+        )
+        
+        # 代理处理后进行质量检查
+        graph.add_edge("tech_support", "quality_check")
+        graph.add_edge("order_service", "quality_check")
+        graph.add_edge("product_consult", "quality_check")
+        graph.add_edge("escalate", END)
+        
+        # 质量检查后的条件路由
+        graph.add_conditional_edges(
+            "quality_check",
+            should_escalate,
+            {
+                "escalate_final": "escalate_final",
+                "respond": "respond"
+            }
+        )
+        
+        graph.add_edge("escalate_final", END)
+        graph.add_edge("respond", END)
+        
+        return graph.compile()
+    
+    def handle_message(self, message: str, chat_history: List[Dict] = None) -> Dict[str, Any]:
+        """处理用户消息"""
+        print(f"\n{'='*60}")
+        print(f"💬 用户: {message}")
+        print('='*60)
+        
+        initial_state = {
+            "user_message": message,
+            "chat_history": chat_history or [],
+            "intent": "",
+            "confidence": 0.0,
+            "agent_response": "",
+            "needs_escalation": False,
+            "escalation_reason": "",
+            "quality_score": 0.0,
+            "metadata": {"timestamp": datetime.now().isoformat()}
+        }
+        
+        result = self.graph.invoke(initial_state)
+        
+        return {
+            "response": result["agent_response"],
+            "intent": result["intent"],
+            "confidence": result["confidence"],
+            "quality_score": result["quality_score"],
+            "escalated": result["needs_escalation"]
+        }
+
+# ==================== 主程序 ====================
+
+def main():
+    """演示多代理客服系统"""
+    
+    print("=" * 60)
+    print("🤖 多代理智能客服系统演示")
+    print("=" * 60)
+    
+    # 初始化系统
+    print("\n📦 初始化客服系统...")
+    system = CustomerServiceSystem()
+    print("✅ 系统初始化完成！")
+    
+    # 测试场景
+    test_cases = [
+        # 技术支持场景
+        {
+            "category": "技术支持",
+            "messages": [
+                "我的蓝牙耳机连接不上手机怎么办？",
+                "手表充电很慢，是不是坏了？"
+            ]
+        },
+        # 订单服务场景
+        {
+            "category": "订单服务",
+            "messages": [
+                "帮我查一下订单 ORD001 的物流状态",
+                "我的订单什么时候能到？订单号是 ORD002"
+            ]
+        },
+        # 产品咨询场景
+        {
+            "category": "产品咨询",
+            "messages": [
+                "你们有什么智能手表推荐吗？预算1500左右",
+                "无线耳机有什么功能？"
+            ]
+        },
+        # 升级场景
+        {
+            "category": "人工升级",
+            "messages": [
+                "我要投诉！这是第三次出问题了！",
+                "我想和你们经理谈谈"
+            ]
+        }
+    ]
+    
+    # 运行测试
+    for test in test_cases:
+        print(f"\n{'='*60}")
+        print(f"📝 测试类别: {test['category']}")
+        print('='*60)
+        
+        for message in test["messages"]:
+            result = system.handle_message(message)
+            
+            print("\n🤖 客服回复:")
+            print(f"{result['response']}")
+            print("\n📊 处理信息:")
+            print(f"   - 意图: {result['intent']}")
+            print(f"   - 置信度: {result['confidence']:.2f}")
+            print(f"   - 质量评分: {result['quality_score']:.2f}")
+            print(f"   - 是否升级: {'是' if result['escalated'] else '否'}")
+            print("-" * 60)
+    
+    # 交互式演示
+    print("\n" + "=" * 60)
+    print("💬 交互式对话演示")
+    print("=" * 60)
+    print("提示: 输入 'quit' 退出")
+    
+    chat_history = []
+    
+    while True:
+        user_input = input("\n👤 您: ").strip()
+        
+        if user_input.lower() == 'quit':
+            print("\n感谢使用智能客服系统，再见！👋")
+            break
+        
+        if not user_input:
+            continue
+        
+        result = system.handle_message(user_input, chat_history)
+        print(f"\n🤖 客服: {result['response']}")
+        
+        # 更新对话历史
+        chat_history.append({"role": "user", "content": user_input})
+        chat_history.append({"role": "assistant", "content": result['response']})
 
 
-# TODO: StateGraph workflow coming soon
+# ==================== Apply mock patches ====================
+if USE_MOCK:
+    IntentClassifier.classify = lambda self, msg: mock.classify(msg)
+    TechSupportAgent.handle = lambda self, msg, hist=None: mock.respond("tech_support", msg)
+    OrderServiceAgent.handle = lambda self, msg, hist=None: mock.respond("order_service", msg)
+    ProductConsultAgent.handle = lambda self, msg, hist=None: mock.respond("product_consult", msg)
+    QualityChecker.check = lambda self, um, ar: mock.quality(um, ar)
+
+if __name__ == "__main__":
+    main()
