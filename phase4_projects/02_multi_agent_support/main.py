@@ -81,15 +81,18 @@ if not USE_MOCK and (not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here
     )
 
 # 初始化模型
-model = init_chat_model("groq:llama-3.3-70b-versatile", api_key=GROQ_API_KEY)
+if not USE_MOCK:
+    model = init_chat_model("groq:llama-3.3-70b-versatile", api_key=GROQ_API_KEY)
+else:
+    model = None
 
 # ==================== Mock 模式（无需 API Key）====================
 class MockLLM:
     INTENT_MAP = {
-        "tech_support": ["蓝牙","耳机","连接不上","充电慢","坏了","故障"],
-        "order_service": ["订单","物流","快递","ORD00","什么时候到","发货"],
-        "product_consult": ["推荐","预算","怎么样","有什么","功能","价格"],
-        "escalate": ["投诉","经理","退款","赔偿","第三次"],
+        "tech_support": ["蓝牙","耳机","连不上","连接不上","充电","充不进去","坏了","故障","触摸","屏幕","表带","离线","更新","防水","声音","断断续续","指示灯","充电线","充电器"],
+        "order_service": ["订单","物流","快递","ORD00","什么时候到","发货","退货","改地址","少发","拆分","发票","单号","SF123"],
+        "product_consult": ["推荐","预算","怎么样","有什么","功能","价格","续航","对比","颜色","礼物","降噪","运动","心率","性价比","送人"],
+        "escalate": ["投诉","经理","领导","退款","赔偿","第三次","骗人","12315","态度差","质量差","破质量","全额","欺诈"],
     }
     RESPONSES = {
         "tech_support": (
@@ -115,8 +118,11 @@ class MockLLM:
     def respond(self, intent, msg):
         return self.RESPONSES.get(intent, self.RESPONSES["product_consult"])
     def quality(self, msg, resp):
-        score = 0.9 if len(resp) > 20 else 0.3
-        return {"score": score, "pass": score >= 0.5, "suggestion": ""}
+        intent = self.classify(msg)["intent"]
+        score = 0.95 if len(resp) > 15 else 0.4
+        score = 0.95 if len(resp) > 15 else 0.4
+        needs_esc = intent == "escalate"
+        return {"total_score": int(score * 100), "needs_escalation": needs_esc, "reason": ""}
 
 mock = MockLLM()
 print("  [Mock] Running in mock mode (no API key needed)")

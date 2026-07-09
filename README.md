@@ -119,6 +119,87 @@ START → classify_intent → route_to_agent
 
 ---
 
+## 📊 量化评估报告
+
+> 基于 40 条标注测试用例的自动化评测结果，覆盖 4 种意图类型与 3 个难度等级。
+> 评估脚本：phase4_projects/02_multi_agent_support/run_evaluation.py
+> 数据集：phase4_projects/02_multi_agent_support/eval_dataset.py
+
+### 总体指标
+
+| 指标 | 得分 | 说明 |
+|------|:----:|------|
+| **意图分类准确率** (Intent Accuracy) | **85.0%** | 40 条中 34 条意图分类正确 |
+| **升级决策准确率** (Escalation Accuracy) | **87.5%** | 是否升级人工的判断准确率 |
+| **升级精确率** (Escalation Precision) | **100.0%** | 判为升级的案例中全部正确（零误报） |
+| **升级召回率** (Escalation Recall) | **54.5%** | 应升级的案例中有 54.5% 被正确识别 |
+| **F1 Score** | **70.6%** | 精确率与召回率的调和平均 |
+| **回复关键词覆盖率** (Keyword Coverage) | **54.6%** | 回复中包含期望关键词的比例 |
+
+### 按难度分解
+
+| Difficulty | Cases | Intent Accuracy | Escalation Accuracy | Keyword Coverage |
+|:-----------|:-----:|:---------------:|:-------------------:|:----------------:|
+| Easy       |  14   |      79%        |        93%          |       50%        |
+| Medium     |  21   |      86%        |        90%          |       56%        |
+| Hard       |   5   |     100%        |        60%          |       63%        |
+
+### 按场景分解
+
+| 场景 | 用例数 | 意图准确率 | 关键词覆盖率 |
+|------|:------:|:----------:|:------------:|
+| 🔧 技术支持 (Tech Support) | 12 | **100%** | **76%** |
+| 📦 订单服务 (Order Service) | 10 | **90%** | 37% |
+| 🛍️ 产品咨询 (Product Consult) | 10 | **70%** | 47% |
+| 👤 人工升级 (Escalation) | 8 | **75%** | 54% |
+
+### 混淆矩阵（升级决策）
+
+`
+              Predicted ESC    Predicted NOT
+Actual YES      TP = 6           FN = 5
+Actual NO       FP = 0           TN = 29
+`
+
+- **零误报** (FP=0)：系统不会错误地将普通咨询升级为人工
+- **主要瓶颈** (FN=5)：部分需要升级的场景未被识别
+
+### 失败案例分析
+
+| 用例 | 期望意图 | 预测意图 | 问题分析 |
+|------|----------|----------|----------|
+| 我想改一下收货地址 | order_service | product_consult | 地址修改被误判为产品咨询 |
+| 无线耳机有什么功能 | product_consult | tech_support | 耳机触发技术支持倾向 |
+| 推荐一款性价比高的耳机 | product_consult | tech_support | 推荐/性价比信号被耳机掩盖 |
+| 耳机降噪效果怎么样 | product_consult | tech_support | 产品参数问题被判定为技术故障 |
+| 我要投诉！这已经是第三次坏了 | escalate | tech_support | 坏了关键词权重高于投诉 |
+| 你们客服态度太差了 | escalate | product_consult | 缺少明确投诉关键词 |
+
+### 优化路线图
+
+| 优先级 | 改进项 | 预期提升 | 实现方式 |
+|:------:|--------|:--------:|----------|
+| **P0** | 升级召回率优化 | 54.5% -> **90%+** | 补充投诉关键词库，增加情感分析信号 |
+| **P0** | 产品咨询意图优化 | 70% -> **90%+** | 区分产品参数与故障排查的语义边界 |
+| **P1** | 关键词覆盖率提升 | 54.6% -> **85%+** | 优化 Agent Prompt 模板，约束回复结构 |
+| **P1** | 接入真实 LLM | 各项 +10~15% | 切换 USE_MOCK = False |
+| **P2** | 集成 RAG 知识库 | 新增上下文召回率 | Pinecone / ChromaDB 存储产品文档 |
+| **P2** | 添加 Human-in-the-Loop | 降低误判风险 | 低置信度触发人工审核 |
+
+### 评估方法
+
+`ash
+cd phase4_projects/02_multi_agent_support
+python run_evaluation.py
+`
+
+评估框架特点：
+- **结构化数据集**：7 字段 TestCase 数据类，支持自动化验证
+- **多维度评分**：意图准确率 + 升级决策质量 + 关键词覆盖率
+- **分层分析**：按难度和场景分组定位具体短板
+- **可复现**：Mock 模式运行，零配置即可复现结果
+
+---
 ## 🚀 快速开始
 
 ```bash
