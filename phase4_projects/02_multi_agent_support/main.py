@@ -27,6 +27,8 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langchain.agents import create_agent
 
+from device_rag import DeviceKnowledgeBase
+
 # ==================== JSON 解析辅助函数 ====================
 
 def safe_parse_json(text: str, default: dict = None) -> dict:
@@ -86,13 +88,33 @@ if not USE_MOCK:
 else:
     model = None
 
+# ==================== 本地演示数据 ====================
+# 结构化订单事实由工具查询，不进入向量知识库，避免 LLM 编造订单状态。
+MOCK_ORDERS = {
+    "ORD001": {"status": "已发货", "tracking_number": "SF123456", "product": "EarPro", "amount": 899},
+    "ORD002": {"status": "运输中", "tracking_number": "YT987654", "product": "WatchPro", "amount": 1299},
+    "ORD003": {"status": "待发货", "tracking_number": None, "product": "Band6", "amount": 399},
+}
+
+MOCK_PRODUCTS = {
+    "EarPro 无线耳机": {"price": 899, "features": ["主动降噪", "IPX4", "30小时续航"], "rating": 4.8},
+    "WatchPro 智能手表": {"price": 1299, "features": ["心率监测", "5ATM", "GPS"], "rating": 4.7},
+    "Band6 智能手环": {"price": 399, "features": ["心率监测", "睡眠分析", "14天续航"], "rating": 4.6},
+}
+
+# 仅保留为旧接口兼容；技术支持主流程已切换到 device_rag。
+FAQ_DATABASE = {
+    "蓝牙连接": "请先确认型号，再检索对应型号说明书中的配对步骤。",
+    "充电问题": "请停止使用异常发热或鼓包设备，并联系人工售后。",
+}
+
 # ==================== Mock 模式（无需 API Key）====================
 class MockLLM:
     INTENT_MAP = {
-        "tech_support": ["蓝牙","耳机","连不上","连接不上","充电","充不进去","坏了","故障","触摸","屏幕","表带","离线","更新","防水","声音","断断续续","指示灯","充电线","充电器"],
-        "order_service": ["订单","物流","快递","ORD00","什么时候到","发货","退货","改地址","少发","拆分","发票","单号","SF123"],
+        "tech_support": ["蓝牙","耳机","连不上","连接不上","充电","充不进去","坏了","故障","触摸","屏幕","表带","离线","更新","防水","声音","没声音","断断续续","指示灯","充电线","充电器","发热","鼓包","进水"],
+        "order_service": ["订单","物流","快递","ORD00","什么时候到","发货","退货","改地址","收货地址","少发","拆分","发票","单号","SF123"],
         "product_consult": ["推荐","预算","怎么样","有什么","功能","价格","续航","对比","颜色","礼物","降噪","运动","心率","性价比","送人"],
-        "escalate": ["投诉","经理","领导","退款","赔偿","第三次","骗人","12315","态度差","质量差","破质量","全额","欺诈"],
+        "escalate": ["投诉","经理","领导","退款","赔偿","第三次","骗人","12315","态度差","客服态度","质量差","破质量","全额","欺诈"],
     }
     RESPONSES = {
         "tech_support": (
@@ -111,9 +133,21 @@ class MockLLM:
         "escalate": "【人工升级】已为您转接高级客服专员，请稍候...",
     }
     def classify(self, msg):
-        for intent, kws in self.INTENT_MAP.items():
+        if "退款" in msg and any(signal in msg for signal in ("到账", "进度", "状态", "多久")):
+            return {"intent": "order_service", "confidence": 0.9}
+        # 投诉和订单具有明确业务边界，优先于产品名等通用词。
+        for intent in ("escalate", "order_service"):
+            kws = self.INTENT_MAP[intent]
             if any(k in msg for k in kws):
                 return {"intent": intent, "confidence": 0.88}
+        # “耳机/手表”本身不能代表故障；商业咨询信号优先判断。
+        consult_signals = ["推荐", "预算", "有什么功能", "价格", "续航", "对比", "颜色", "礼物", "降噪效果", "性价比", "送人", "能测心率"]
+        if any(signal in msg for signal in consult_signals):
+            return {"intent": "product_consult", "confidence": 0.88}
+        if any(k in msg for k in self.INTENT_MAP["tech_support"]):
+            return {"intent": "tech_support", "confidence": 0.88}
+        if any(k in msg for k in self.INTENT_MAP["product_consult"]):
+            return {"intent": "product_consult", "confidence": 0.88}
         return {"intent": "product_consult", "confidence": 0.65}
     def respond(self, intent, msg):
         return self.RESPONSES.get(intent, self.RESPONSES["product_consult"])
@@ -126,6 +160,9 @@ class MockLLM:
 
 mock = MockLLM()
 print("  [Mock] Running in mock mode (no API key needed)")
+
+# 本地混合检索知识库：无需 API Key，便于演示与离线评测。
+device_kb = DeviceKnowledgeBase()
 
 
 @tool
@@ -226,6 +263,17 @@ def search_faq(problem_type: str) -> str:
             return f"【{key}】\n{answer}"
     return "未找到相关FAQ，建议联系人工客服获取更多帮助。"
 
+
+@tool
+def search_device_knowledge(query: str, model_name: str = "") -> str:
+    """检索指定电子产品型号的说明书和故障排查资料。
+
+    Args:
+        query: 用户描述的故障或使用问题
+        model_name: 产品型号，如 EarPro、EarLite、WatchPro、WatchS、Band5、Band6
+    """
+    return device_kb.answer(query=query, model=model_name or None)
+
 # ==================== 状态定义 ====================
 
 class CustomerServiceState(TypedDict):
@@ -282,14 +330,15 @@ class TechSupportAgent:
     
     def __init__(self):
         self.llm = model
-        self.tools = [search_faq]
+        self.tools = [search_device_knowledge]
         
         # 先定义 system_prompt
         self.system_prompt = """你是一个专业的技术支持工程师。你的职责是：
 1. 分析用户遇到的技术问题
 2. 提供清晰的故障排除步骤
-3. 使用 search_faq 工具查找相关解决方案
-4. 如果问题超出能力范围，建议升级到人工支持
+3. 先确认产品型号，再使用 search_device_knowledge 检索对应型号资料
+4. 回答必须保留工具返回的文档名称、章节和页码，不得编造操作步骤
+5. 型号不明确时先追问；出现[需要人工]时停止远程排查并升级人工支持
 
 回复要求：
 - 语气友好专业
@@ -520,6 +569,11 @@ class CustomerServiceSystem:
             if result.get("needs_escalation", False) or state["quality_score"] < 0.6:
                 state["needs_escalation"] = True
                 state["escalation_reason"] = result.get("reason", "质量检查未通过")
+
+            # 知识库明确标记的高风险/无可靠证据场景必须转人工。
+            if "[需要人工]" in state["agent_response"]:
+                state["needs_escalation"] = True
+                state["escalation_reason"] = "知识库识别到高风险操作或证据不足"
             
             print(f"   质量评分: {state['quality_score']:.2f}")
             return state
@@ -718,7 +772,12 @@ def main():
 # ==================== Apply mock patches ====================
 if USE_MOCK:
     IntentClassifier.classify = lambda self, msg: mock.classify(msg)
-    TechSupportAgent.handle = lambda self, msg, hist=None: mock.respond("tech_support", msg)
+
+    def mock_tech_support(self, msg, hist=None):
+        """Mock 模式也运行真实检索，避免评测固定模板回复。"""
+        return device_kb.answer(msg)
+
+    TechSupportAgent.handle = mock_tech_support
     OrderServiceAgent.handle = lambda self, msg, hist=None: mock.respond("order_service", msg)
     ProductConsultAgent.handle = lambda self, msg, hist=None: mock.respond("product_consult", msg)
     QualityChecker.check = lambda self, um, ar: mock.quality(um, ar)

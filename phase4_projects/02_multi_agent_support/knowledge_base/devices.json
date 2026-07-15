@@ -1,0 +1,14 @@
+[
+  {"id":"earpro-connect-01","product_type":"earphone","model":"EarPro","doc_type":"用户手册","section":"蓝牙配对","page":12,"risk_level":"low","content":"EarPro连接失败时，先在手机蓝牙列表中删除EarPro记录，将双耳放回充电盒10秒，再长按盒后按钮8秒，白灯闪烁后重新配对。"},
+  {"id":"earpro-audio-01","product_type":"earphone","model":"EarPro","doc_type":"故障排查手册","section":"单侧无声","page":18,"risk_level":"low","content":"EarPro单侧无声音时，清洁耳机和充电盒触点，确认两侧均显示充电；随后执行恢复配对。仍无声时记录左右耳电量并联系售后。"},
+  {"id":"earpro-water-01","product_type":"earphone","model":"EarPro","doc_type":"安全手册","section":"进水处理","page":4,"risk_level":"high","content":"EarPro进水后应立即停止使用，不要放回充电盒或连接电源，不得吹风加热和自行拆机，应擦干表面后联系售后检测。"},
+  {"id":"earlite-connect-01","product_type":"earphone","model":"EarLite","doc_type":"用户手册","section":"重新配对","page":9,"risk_level":"low","content":"EarLite连接失败时，将耳机放回盒内并保持盒盖打开，同时触摸左右耳机5秒，蓝灯交替闪烁后在手机端重新搜索EarLite。"},
+  {"id":"earlite-charge-01","product_type":"earphone","model":"EarLite","doc_type":"故障排查手册","section":"无法充电","page":15,"risk_level":"medium","content":"EarLite充电指示灯不亮时，使用5V 1A适配器，更换USB-C线并清理充电口。若接口松动或发热，停止充电并联系售后。"},
+  {"id":"watchpro-charge-01","product_type":"watch","model":"WatchPro","doc_type":"故障排查手册","section":"充电缓慢","page":21,"risk_level":"medium","content":"WatchPro充电缓慢时，使用原装磁吸底座，清洁表背触点并关闭高耗电应用。环境温度应保持在5至35摄氏度。"},
+  {"id":"watchpro-screen-01","product_type":"watch","model":"WatchPro","doc_type":"用户手册","section":"触摸失灵","page":24,"risk_level":"low","content":"WatchPro触摸无响应时，擦干屏幕并长按侧键12秒强制重启；若屏幕破裂或机身鼓起，应停止佩戴并联系售后。"},
+  {"id":"watchpro-battery-01","product_type":"watch","model":"WatchPro","doc_type":"安全手册","section":"电池鼓包","page":5,"risk_level":"high","content":"WatchPro出现表背隆起、异常发热或异味时可能为电池异常，应立即关机、远离火源，不得继续充电、挤压或拆机。"},
+  {"id":"watchs-update-01","product_type":"watch","model":"WatchS","doc_type":"用户手册","section":"固件更新与升级","page":30,"risk_level":"medium","content":"WatchS固件更新或升级前需保证电量高于50%，手机蓝牙稳定且App保持前台。更新过程中不得退出App或关闭蓝牙。"},
+  {"id":"watchs-water-01","product_type":"watch","model":"WatchS","doc_type":"规格说明","section":"防水等级","page":7,"risk_level":"low","content":"WatchS支持5ATM日常防水，可用于泳池游泳，不适用于热水淋浴、桑拿、潜水或高速水流场景。"},
+  {"id":"band5-offline-01","product_type":"band","model":"Band5","doc_type":"故障排查手册","section":"设备离线","page":16,"risk_level":"low","content":"Band5在App中显示离线时，开启手机蓝牙和定位权限，允许App后台运行，并在距离手机10米内下拉刷新设备列表。"},
+  {"id":"band6-heart-01","product_type":"band","model":"Band6","doc_type":"用户手册","section":"心率测量","page":11,"risk_level":"low","content":"Band6测量心率时应佩戴在腕骨后约一指位置，保持传感器贴合且手臂静止。运动、汗水和过松佩戴会影响读数。"}
+]

@@ -124,13 +124,9 @@ class Evaluator:
 
         # Optimization suggestions
         print("\n  [ Optimization Roadmap ]")
-        print("  - Switch from keyword intent classification to LLM-based: "
-              "{:.0f}% -> 95%+ expected".format(intent_acc))
-        print("  - Improve prompt templates with specific content constraints: "
-              "{:.0f}% -> 90%+ expected".format(avg_kw_pct))
-        print("  - Add more escalation trigger keywords: "
-              "{:.0f}% -> 95%+ expected".format(r))
-        print("  - Integrate RAG knowledge base for context recall metrics")
+        print("  - Replace the small Mock rule set with real-LLM and adversarial evaluations")
+        print("  - Track multi-turn troubleshooting state to improve escalation recall")
+        print("  - Use run_rag_evaluation.py for retrieval metrics; keyword coverage is legacy")
         print("\n  {} test cases evaluated. Done.".format(total))
 
 if __name__ == "__main__":
