@@ -1,11 +1,25 @@
-"""Evaluate retrieval quality and model isolation without an API key."""
+"""Evaluate retrieval quality and model isolation.
+
+Use ``--embedding`` after installing ``requirements-embedding.txt`` to run
+the optional BGE dense-retrieval branch.
+"""
+
+import argparse
 
 from device_rag import DeviceKnowledgeBase
 from rag_eval_dataset import RAG_EVAL_DATASET
 
 
 def main() -> None:
-    knowledge_base = DeviceKnowledgeBase()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--embedding", action="store_true", help="enable BGE dense retrieval")
+    args = parser.parse_args()
+    knowledge_base = DeviceKnowledgeBase(use_embeddings=args.embedding)
+    if args.embedding and knowledge_base.embedding_model is None:
+        raise SystemExit(
+            "BGE could not be loaded. Install requirements-embedding.txt and check model access. "
+            f"Details: {knowledge_base.embedding_error}"
+        )
     hits_at_1 = hits_at_3 = reciprocal_rank = 0.0
     for case in RAG_EVAL_DATASET:
         results = knowledge_base.search(case["query"], top_k=3)
@@ -19,6 +33,8 @@ def main() -> None:
 
     total = len(RAG_EVAL_DATASET)
     print("\n=== Device RAG Evaluation ===")
+    print(f"Backend:  {knowledge_base.retrieval_backend}")
+    print(f"Documents:{len(knowledge_base.documents)}")
     print(f"Recall@1: {hits_at_1 / total:.1%}")
     print(f"Recall@3: {hits_at_3 / total:.1%}")
     print(f"MRR:      {reciprocal_rank / total:.3f}")

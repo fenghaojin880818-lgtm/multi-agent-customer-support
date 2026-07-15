@@ -125,7 +125,7 @@ class Evaluator:
         # Optimization suggestions
         print("\n  [ Optimization Roadmap ]")
         print("  - Replace the small Mock rule set with real-LLM and adversarial evaluations")
-        print("  - Track multi-turn troubleshooting state to improve escalation recall")
+        print("  - Persist multi-turn troubleshooting state with a SQLite/Redis checkpointer")
         print("  - Use run_rag_evaluation.py for retrieval metrics; keyword coverage is legacy")
         print("\n  {} test cases evaluated. Done.".format(total))
 

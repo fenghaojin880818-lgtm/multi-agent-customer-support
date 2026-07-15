@@ -18,18 +18,35 @@
 
 本项目实现了一个面向蓝牙耳机、智能手表和智能手环的**多 Agent 客服原型**。系统根据用户意图调用技术支持、订单服务或产品咨询能力，并在低置信度、证据不足及高风险场景下升级人工客服。
 
-技术支持 Agent 不再依赖固定 FAQ：它会识别产品型号，对说明书和故障排查资料进行 BM25 + 字符级 TF-IDF 混合检索，经过型号 Metadata 过滤后返回带章节、页码和相关度的证据。当前知识库为可复现的模拟资料，后续可替换为真实产品手册。
+技术支持 Agent 不再依赖固定 FAQ：它会识别产品型号，对说明书和故障排查资料进行 BM25 + 字符级 TF-IDF 混合检索；安装可选依赖后还可启用 BGE Dense Embedding。检索经过型号 Metadata 过滤后返回带章节、页码和相关度的证据。当前知识库为可复现的模拟资料，后续可替换为真实产品手册。
 
 ### RAG 设计亮点
 
 - **型号隔离**：EarPro、EarLite、WatchPro、WatchS、Band5、Band6 的操作说明不会串用。
-- **混合检索**：BM25 负责型号、故障码等精确信号，字符级 TF-IDF 兼顾中文口语描述。
+- **混合检索**：BM25负责型号等精确信号，TF-IDF提供离线语义基线，可选BGE Embedding处理复杂口语。
 - **证据引用**：每条结果包含文档、章节、页码与相关度，便于客服核验。
 - **安全升级**：电池鼓包、进水充电、拆机等高风险内容强制标记转人工。
-- **离线可评测**：无需 API Key 即可运行检索评测，当前模拟集 Recall@1 100%、Recall@3 100%、型号串扰为 0（以本仓库测试结果为准）。
+- **多轮排障状态**：记录型号、排障轮数和已使用证据，避免重复步骤；解决、高风险或达到上限时终止。
+- **离线可评测**：36条文档、36条查询的模拟集上，Recall@1 97.2%、Recall@3 100%、MRR 0.986、型号串扰为0。
 
 ```bash
 python phase4_projects/02_multi_agent_support/run_rag_evaluation.py
+```
+
+### 可视化演示
+
+```bash
+pip install -r requirements-demo.txt
+streamlit run phase4_projects/02_multi_agent_support/streamlit_app.py
+```
+
+界面会展示当前产品型号、排障轮数、已经使用的证据、文档页码、相关度及人工升级原因。
+
+可选运行 BGE 检索评测（首次运行会下载模型）：
+
+```bash
+pip install -r requirements-embedding.txt
+python phase4_projects/02_multi_agent_support/run_rag_evaluation.py --embedding
 ```
 
 ---
@@ -181,16 +198,17 @@ Actual NO       FP = 0           TN = 29
 ### 当前局限
 
 - 当前意图分类高分来自小型Mock测试集，需要接入真实LLM并扩充对抗样本验证。
-- 技术支持尚未持久化“用户已经尝试过的步骤”，多轮失败升级仍有漏判。
-- 知识库为12条模拟手册片段，不能把当前100%检索结果直接作为线上收益。
+- 多轮状态目前保存在进程内，服务重启后不会恢复；生产环境需接入SQLite或Redis Checkpointer。
+- 知识库为36条模拟手册片段，不能把当前检索结果直接作为线上收益。
+- BGE为可选后端，默认离线模式仍使用BM25 + TF-IDF，便于零配置复现。
 
 ### 优化路线图
 
 | 优先级 | 改进项 | 预期提升 | 实现方式 |
 |:------:|--------|:--------:|----------|
-| **P0** | 多轮排障状态 | 降低重复步骤和漏升级 | 记录型号、已尝试步骤和诊断轮次 |
-| **P0** | 扩充知识库评测 | 验证真实泛化能力 | 导入真实说明书并增加同型号干扰文档 |
-| **P1** | 接入Embedding | 改善复杂口语召回 | 保留BM25，替换TF-IDF语义支路 |
+| **P0** | 导入真实说明书 | 验证真实泛化能力 | PDF结构化解析、页码保留和对抗样本 |
+| **P0** | 状态持久化 | 支持服务恢复 | LangGraph Checkpointer + SQLite/Redis |
+| **P1** | BGE消融实验 | 验证复杂口语收益 | 对比BM25、TF-IDF、BGE及混合方案 |
 | **P1** | 接入真实LLM评测 | 替代Mock规则结论 | 切换 USE_MOCK = False 并保存运行轨迹 |
 | **P2** | Human-in-the-Loop持久化 | 降低敏感操作风险 | LangGraph interrupt + SQLite checkpointer |
 
@@ -287,7 +305,7 @@ multi-agent-customer-support/
 - [ ] 添加 SQLite 持久化存储（`langgraph-checkpoint-sqlite`）
 - [ ] 集成 FastAPI 暴露 RESTful 接口
 - [ ] 添加 WebSocket 实时推送
-- [ ] 接入 Streamlit / Next.js 前端界面
+- [x] 接入 Streamlit 演示界面
 - [ ] 支持多语言（英语、日语等）
 - [ ] 添加用户反馈闭环（Feedback Loop）
 
